@@ -7,6 +7,8 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\AuditController;
+use App\Http\Controllers\PageController;
+
 
 
 /*
@@ -63,5 +65,12 @@ Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard
 
 
 Route::get('/users', [UserController::class, 'index'])->name('users.index');
+
+
+
+Route::get('/features', [PageController::class, 'features'])->name('features');
+Route::get('/security', [PageController::class, 'security'])->name('security');
+Route::get('/contact', [PageController::class, 'contact'])->name('contact');
+
 
 require __DIR__.'/auth.php';
