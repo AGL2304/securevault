@@ -1,0 +1,161 @@
+
+
+services:
+  # Application Laravel
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: securevault_app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    networks:
+      - securevault_network
+    depends_on:
+      - mysql
+      - redis
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=mysql
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_DATABASE=securevault
+      - DB_USERNAME=securevault_user
+      - DB_PASSWORD=secure_password_123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+  # Serveur web Nginx
+  nginx:
+    image: nginx:alpine
+    container_name: securevault_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
+      - ./docker/nginx/ssl:/etc/nginx/ssl
+    networks:
+      - securevault_network
+    depends_on:
+      - app
+
+  # Base de données MySQL
+  mysql:
+    image: mysql:8.0
+    container_name: securevault_mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_123
+      MYSQL_DATABASE: securevault
+      MYSQL_USER: securevault_user
+      MYSQL_PASSWORD: secure_password_123
+    command: --default-authentication-plugin=mysql_native_password
+    networks:
+      - securevault_network
+
+  # Redis pour le cache et les sessions
+  redis:
+    image: redis:alpine
+    container_name: securevault_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass redis_password_123
+    networks:
+      - securevault_network
+
+  # PhpMyAdmin pour la gestion de la base de données
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: securevault_phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: root_password_123
+    networks:
+      - securevault_network
+    depends_on:
+      - mysql
+
+  # Node.js pour la compilation des assets frontend
+  node:
+    image: node:18-alpine
+    container_name: securevault_node
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    command: sh -c "npm install && npm run dev"
+    networks:
+      - securevault_network
+
+  # Mailhog pour les tests d'emails en local
+  mailhog:
+    image: mailhog/mailhog
+    container_name: securevault_mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - securevault_network
+
+  # Service pour les tâches cron Laravel
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: securevault_scheduler
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    command: sh -c "while true; do php artisan schedule:run; sleep 60; done"
+    networks:
+      - securevault_network
+    depends_on:
+      - mysql
+      - redis
+
+  # Worker pour les queues Laravel
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: securevault_queue
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    networks:
+      - securevault_network
+    depends_on:
+      - mysql
+      - redis
+
+networks:
+  securevault_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
